@@ -129,10 +129,12 @@ Thanks to everyone who tested it after the
 | Framework laptop | CachyOS | `install.sh` with the `dnf` line commented out, deps installed by hand | [u/CRRogue](https://www.reddit.com/user/CRRogue) |
 
 So far it works on the **Laptop 16** and the **Laptop 13 (AMD and Intel)**.
-Older Framework 13 models with a `chromeos:multicolor:power` LED are supported
-too (thanks [u/catastrophic-success](https://www.reddit.com/user/catastrophic-success)
-for the report); the multicolor code path was tested on the same kind of LED,
-but confirmation on one of those laptops is welcome.
+Support for older Framework 13 models with a `chromeos:multicolor:power` LED
+was contributed by
+[u/catastrophic-success](https://www.reddit.com/user/catastrophic-success),
+who reported the LED and provided its details (Framework 13 DIY Intel i5,
+Manjaro). The multicolor code path was tested on the same kind of LED;
+confirmation on one of those laptops is welcome.
 Native Arch and CachyOS support in the installer was contributed by
 [@JoshCodeStuff](https://github.com/JoshCodeStuff) in
 [#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2);
