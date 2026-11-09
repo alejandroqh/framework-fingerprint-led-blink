@@ -10,7 +10,10 @@ UNIT=/etc/systemd/system/$NAME.service
 RULE=/etc/udev/rules.d/90-$NAME.rules
 SYSUSERS=/etc/sysusers.d/$NAME.conf
 GROUP=fprint-led
+# Power-button LED: white on most models, multicolor on older Framework 13.
 LED=/sys/class/leds/chromeos:white:power
+[[ -e $LED/trigger ]] || LED=/sys/class/leds/chromeos:multicolor:power
+LED_FILES=(trigger brightness multi_intensity)
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -34,8 +37,12 @@ do_uninstall() {
     systemctl daemon-reload
     udevadm control --reload 2>/dev/null || true
     if [[ -e $LED/trigger ]]; then
-        chown root:root "$LED/trigger" "$LED/brightness" || true
-        chmod 0644 "$LED/trigger" "$LED/brightness" || true
+        local f
+        for f in "${LED_FILES[@]}"; do
+            [[ -e $LED/$f ]] || continue
+            chown root:root "$LED/$f" || true
+            chmod 0644 "$LED/$f" || true
+        done
         echo chromeos-auto > "$LED/trigger" || true
     fi
     groupdel "$GROUP" 2>/dev/null || true
@@ -44,7 +51,7 @@ do_uninstall() {
 
 do_install() {
     if [[ ! -e $LED/trigger ]]; then
-        die "LED $LED not found. This needs a Framework laptop with the cros_ec LED driver (leds_cros_ec)."
+        die "No chromeos:white:power or chromeos:multicolor:power LED found. This needs a Framework laptop with the cros_ec LED driver (leds_cros_ec)."
     fi
 
     local pkgs=()
@@ -79,7 +86,9 @@ do_install() {
     udevadm trigger --action=change "$LED"
     udevadm settle
     local f
-    for f in trigger brightness; do
+    info "Using LED $LED"
+    for f in "${LED_FILES[@]}"; do
+        [[ -e $LED/$f ]] || continue
         if [[ $(stat -c %G "$LED/$f") != "$GROUP" ]] || [[ ! -w $LED/$f ]] \
            || (( ( 8#$(stat -c %a "$LED/$f") & 8#020 ) == 0 )); then
             die "udev rule did not apply to $LED/$f (expected group $GROUP, g+w)."

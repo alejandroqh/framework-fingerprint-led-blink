@@ -19,9 +19,14 @@ offer a setting for this, so this small service adds the visual cue.
   `gdbus monitor --system --dest net.reactivated.Fprint`, which only receives
   signals sent by fprintd itself.
 - fprintd's device property `finger-needed` turns `true` exactly while the
-  sensor is waiting for a finger. Then the service takes over the LED
-  `/sys/class/leds/chromeos:white:power` (exposed by the `leds_cros_ec`
-  kernel driver) and blinks it: 0.25 s on / 0.25 s off.
+  sensor is waiting for a finger. Then the service takes over the power-button
+  LED (exposed by the `leds_cros_ec` kernel driver) and blinks it white:
+  0.25 s on / 0.25 s off.
+  - `chromeos:white:power` on most models.
+  - `chromeos:multicolor:power` on older Framework 13 (Intel 11th–13th gen),
+    picked automatically. Its default color is red, so the service switches
+    it to the white channel while blinking and restores the original colors
+    afterwards.
 - When `finger-needed` turns `false` (match, no match, cancel, timeout) or
   fprintd goes away, it stops and hands the LED back to the embedded
   controller (`chromeos-auto` trigger).
@@ -69,7 +74,7 @@ Uninstall:
 |---|---|
 | `/usr/local/sbin/framework-fingerprint-led-blink` | the watcher (Python, stdlib only) |
 | `/etc/systemd/system/framework-fingerprint-led-blink.service` | systemd unit (unprivileged, sandboxed) |
-| `/etc/udev/rules.d/90-framework-fingerprint-led-blink.rules` | gives group `fprint-led` write access to the LED's `trigger` and `brightness` only |
+| `/etc/udev/rules.d/90-framework-fingerprint-led-blink.rules` | gives group `fprint-led` write access to the LED's `trigger`, `brightness` and `multi_intensity` only |
 | `/etc/sysusers.d/framework-fingerprint-led-blink.conf` | creates the `fprint-led` group |
 
 ## Security
@@ -89,8 +94,8 @@ Current design:
   be forged), and only fprintd's own `finger-needed` state is used. A rejected
   `VerifyStart` never sets it.
 - **No root.** The service runs as a throwaway `DynamicUser` with no
-  capabilities. The udev rule lets it write two files: the LED's `trigger` and
-  `brightness`.
+  capabilities. The udev rule lets it write only the LED's `trigger`,
+  `brightness` and `multi_intensity` (color) files.
 - **Sandboxed.** Read-only filesystem, no network, private `/tmp` and `/dev`,
   syscall filter, `NoNewPrivileges`, `MemoryDenyWriteExecute` and more.
   `systemd-analyze security framework-fingerprint-led-blink` rates it
@@ -124,6 +129,10 @@ Thanks to everyone who tested it after the
 | Framework laptop | CachyOS | `install.sh` with the `dnf` line commented out, deps installed by hand | [u/CRRogue](https://www.reddit.com/user/CRRogue) |
 
 So far it works on the **Laptop 16** and the **Laptop 13 (AMD and Intel)**.
+Older Framework 13 models with a `chromeos:multicolor:power` LED are supported
+too (thanks [u/catastrophic-success](https://www.reddit.com/user/catastrophic-success)
+for the report); the multicolor code path was tested on the same kind of LED,
+but confirmation on one of those laptops is welcome.
 Native Arch and CachyOS support in the installer was contributed by
 [@JoshCodeStuff](https://github.com/JoshCodeStuff) in
 [#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2);
@@ -186,7 +195,7 @@ MemoryDenyWriteExecute=no
 If the LED ever gets stuck, return it to the EC manually:
 
 ```bash
-echo chromeos-auto | sudo tee /sys/class/leds/chromeos:white:power/trigger
+echo chromeos-auto | sudo tee /sys/class/leds/chromeos:*:power/trigger
 ```
 
 ## License

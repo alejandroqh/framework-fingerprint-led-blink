@@ -8,6 +8,7 @@ other users cannot spoof them. The LED blinks while fprintd's own
 (chromeos-auto) when it turns false, fprintd goes away, or after a safety
 timeout.
 """
+import os
 import re
 import signal
 import subprocess
@@ -15,6 +16,10 @@ import sys
 import threading
 
 LED = "/sys/class/leds/chromeos:white:power"
+# Older Framework 13 (Intel 11th-13th gen) expose the power LED as a
+# multicolor LED instead; it is used when LED does not exist.
+LED_FALLBACK = "/sys/class/leds/chromeos:multicolor:power"
+COLOR = "white"           # channel to light on multicolor LEDs
 ON_S, OFF_S = 0.25, 0.25
 MAX_BLINK_S = 60          # safety: never blink longer than this
 BUS_NAME = "net.reactivated.Fprint"
@@ -35,6 +40,20 @@ lock = threading.Lock()
 blinker = None
 
 
+if not os.path.exists(f"{LED}/trigger") and os.path.exists(f"{LED_FALLBACK}/trigger"):
+    LED = LED_FALLBACK
+
+saved_intensity = None    # multicolor: channel intensities to put back afterwards
+
+
+def read(name):
+    try:
+        with open(f"{LED}/{name}") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
 def write(name, value):
     try:
         with open(f"{LED}/{name}", "w") as f:
@@ -43,12 +62,27 @@ def write(name, value):
         print(f"LED write {name}={value} failed: {e}", file=sys.stderr)
 
 
+def select_color():
+    """On a multicolor LED, light only COLOR while blinking (default is often red)."""
+    global saved_intensity
+    channels = (read("multi_index") or "").split()
+    if len(channels) < 2 or COLOR not in channels:
+        return
+    saved_intensity = read("multi_intensity")
+    write("multi_intensity", " ".join("100" if c == COLOR else "0" for c in channels))
+
+
 def restore():
+    global saved_intensity
+    if saved_intensity is not None:
+        write("multi_intensity", saved_intensity)
+        saved_intensity = None
     write("trigger", "chromeos-auto")
 
 
 def blink_loop(evt):
     write("trigger", "none")
+    select_color()
     elapsed = 0.0
     try:
         while not evt.is_set() and elapsed < MAX_BLINK_S:

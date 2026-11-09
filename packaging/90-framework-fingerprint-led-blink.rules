@@ -1,5 +1,7 @@
-# Let group fprint-led write only the trigger and brightness of the Framework
-# power-button LED, so framework-fingerprint-led-blink can run without root.
-ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="chromeos:white:power", \
-  RUN+="/usr/bin/chgrp fprint-led /sys%p/trigger /sys%p/brightness", \
-  RUN+="/usr/bin/chmod g+w /sys%p/trigger /sys%p/brightness"
+# Let group fprint-led write only the trigger, brightness and color intensity of
+# the Framework power-button LED, so framework-fingerprint-led-blink can run
+# without root. chromeos:white:power on most models, chromeos:multicolor:power
+# on older Framework 13 (Intel 11th-13th gen).
+ACTION=="add|change", SUBSYSTEM=="leds", KERNEL=="chromeos:white:power|chromeos:multicolor:power", \
+  RUN+="/usr/bin/chgrp fprint-led /sys%p/trigger /sys%p/brightness /sys%p/multi_intensity", \
+  RUN+="/usr/bin/chmod g+w /sys%p/trigger /sys%p/brightness /sys%p/multi_intensity"
