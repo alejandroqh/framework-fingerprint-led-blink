@@ -28,7 +28,7 @@ offer a setting for this, so this small service adds the visual cue.
 
 Nothing in fprintd, libfprint, PAM or the sensor firmware is modified.
 
-## Install (Fedora)
+## Install
 
 ```bash
 git clone https://github.com/alejandroqh/framework-fingerprint-led-blink.git
@@ -36,9 +36,14 @@ cd framework-fingerprint-led-blink
 ./install.sh
 ```
 
-The installer asks for sudo, installs missing dependencies (`dbus-tools`,
-`python3`, `fprintd`), copies the files, restores SELinux labels and enables
-the service.
+The installer asks for sudo, installs missing dependencies, copies the files,
+restores SELinux labels (where present) and enables the service.
+
+| Distro | Dependencies installed |
+|---|---|
+| Fedora and derivatives (`dnf`) | `dbus-tools`, `python3`, `fprintd`, `fprintd-pam` |
+| Arch, CachyOS and derivatives (`pacman`) | `dbus`, `python`, `fprintd` |
+| Others | none: install `fprintd`, `dbus-monitor` and `python3` yourself first |
 
 Test it:
 
@@ -80,9 +85,9 @@ Thanks to everyone who tested it after the
 | Framework laptop | CachyOS | `install.sh` with the `dnf` line commented out, deps installed by hand | [u/CRRogue](https://www.reddit.com/user/CRRogue) |
 
 So far it works on the **Laptop 16** and the **Laptop 13 (AMD and Intel)**.
-On non-Fedora distros, install `fprintd`, `dbus` (for `dbus-monitor`) and
-`python` with your package manager first; native Arch support in the installer
-is in progress ([#1](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/1)).
+The installer supports Arch and CachyOS natively since
+[#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2);
+the Arch and CachyOS reports above predate it.
 
 Tested it on another model or distro? Open an issue or PR to add it here.
 

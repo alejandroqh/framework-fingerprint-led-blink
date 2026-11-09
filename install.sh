@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installer for framework-fingerprint-led-blink on Fedora.
+# Installer for framework-fingerprint-led-blink (Fedora / Arch; others: deps by hand).
 #   ./install.sh             install / update and start the service
 #   ./install.sh --uninstall stop, disable and remove everything
 set -euo pipefail
@@ -34,11 +34,6 @@ do_uninstall() {
 }
 
 do_install() {
-    if ! grep -qi fedora /etc/os-release; then
-        warn "This installer targets Fedora; continuing anyway."
-        warn "Please ensure fprintd (fprintd-pam if applicable), dbus-tools, and python 3 are installed."
-    fi
-
     if [[ ! -e $LED/trigger ]]; then
         die "LED $LED not found. This needs a Framework laptop with the cros_ec LED driver (leds_cros_ec)."
     fi
@@ -46,6 +41,7 @@ do_install() {
     local pkgs=()
 
     if command -v dnf >/dev/null; then
+        # Fedora and derivatives
         command -v dbus-monitor >/dev/null || pkgs+=(dbus-tools)
         command -v python3      >/dev/null || pkgs+=(python3)
         rpm -q fprintd >/dev/null 2>&1     || pkgs+=(fprintd fprintd-pam)
@@ -54,8 +50,15 @@ do_install() {
             dnf install -y "${pkgs[@]}"
         fi
     elif command -v pacman >/dev/null; then
-            info "Installing dependencies: dbus python fprintd"
-            pacman -S --needed --noconfirm dbus python fprintd
+        # Arch, CachyOS and derivatives (--needed skips what is already installed)
+        info "Installing dependencies: dbus python fprintd"
+        pacman -S --needed --noconfirm dbus python fprintd
+    else
+        warn "No dnf or pacman found; skipping dependency installation."
+        warn "Make sure fprintd, dbus-monitor and python3 are installed."
+        for cmd in fprintd-verify dbus-monitor python3; do
+            command -v "$cmd" >/dev/null || warn "missing: $cmd"
+        done
     fi
 
     info "Installing $BIN and $UNIT"
