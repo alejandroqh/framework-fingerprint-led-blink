@@ -36,6 +36,7 @@ do_uninstall() {
 do_install() {
     if ! grep -qi fedora /etc/os-release; then
         warn "This installer targets Fedora; continuing anyway."
+        warn "Please ensure fprintd (fprintd-pam if applicable), dbus-tools, and python 3 are installed."
     fi
 
     if [[ ! -e $LED/trigger ]]; then
@@ -43,12 +44,18 @@ do_install() {
     fi
 
     local pkgs=()
-    command -v dbus-monitor >/dev/null || pkgs+=(dbus-tools)
-    command -v python3      >/dev/null || pkgs+=(python3)
-    rpm -q fprintd >/dev/null 2>&1     || pkgs+=(fprintd fprintd-pam)
-    if ((${#pkgs[@]})); then
-        info "Installing dependencies: ${pkgs[*]}"
-        dnf install -y "${pkgs[@]}"
+
+    if command -v dnf >/dev/null; then
+        command -v dbus-monitor >/dev/null || pkgs+=(dbus-tools)
+        command -v python3      >/dev/null || pkgs+=(python3)
+        rpm -q fprintd >/dev/null 2>&1     || pkgs+=(fprintd fprintd-pam)
+        if ((${#pkgs[@]})); then
+            info "Installing dependencies: ${pkgs[*]}"
+            dnf install -y "${pkgs[@]}"
+        fi
+    elif command -v pacman >/dev/null; then
+            info "Installing dependencies: dbus python fprintd"
+            pacman -S --needed --noconfirm dbus python fprintd
     fi
 
     info "Installing $BIN and $UNIT"
