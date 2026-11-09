@@ -85,7 +85,8 @@ Thanks to everyone who tested it after the
 | Framework laptop | CachyOS | `install.sh` with the `dnf` line commented out, deps installed by hand | [u/CRRogue](https://www.reddit.com/user/CRRogue) |
 
 So far it works on the **Laptop 16** and the **Laptop 13 (AMD and Intel)**.
-The installer supports Arch and CachyOS natively since
+Native Arch and CachyOS support in the installer was contributed by
+[@JoshCodeStuff](https://github.com/JoshCodeStuff) in
 [#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2);
 the Arch and CachyOS reports above predate it.
 
