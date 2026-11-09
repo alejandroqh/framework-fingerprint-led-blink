@@ -1,11 +1,14 @@
 #!/usr/bin/python3 -I
 """Blink the Framework Laptop (13 / 16) power-button LED while fprintd waits for a finger.
 
-Watches the system bus (as root, via dbus-monitor/BecomeMonitor) for
-net.reactivated.Fprint.Device VerifyStart / EnrollStart and blinks
-chromeos:white:power until VerifyStop / EnrollStop / a final status / Release,
-or a safety timeout. The LED is always handed back to the EC (chromeos-auto).
+Runs unprivileged. Subscribes (via `gdbus monitor --dest`) only to signals sent
+by the current owner of net.reactivated.Fprint; the bus stamps the sender, so
+other users cannot spoof them. The LED blinks while fprintd's own
+`finger-needed` device property is true, and is always handed back to the EC
+(chromeos-auto) when it turns false, fprintd goes away, or after a safety
+timeout.
 """
+import re
 import signal
 import subprocess
 import sys
@@ -14,9 +17,18 @@ import threading
 LED = "/sys/class/leds/chromeos:white:power"
 ON_S, OFF_S = 0.25, 0.25
 MAX_BLINK_S = 60          # safety: never blink longer than this
-IFACE = "net.reactivated.Fprint.Device"
-START = {"VerifyStart", "EnrollStart"}
-STOP = {"VerifyStop", "EnrollStop", "Release"}
+BUS_NAME = "net.reactivated.Fprint"
+
+# gdbus monitor line for a finger-needed change on a device object, e.g.
+# /net/reactivated/Fprint/Device/0: org.freedesktop.DBus.Properties.PropertiesChanged
+#   ('net.reactivated.Fprint.Device', {'finger-needed': <true>}, @as [])
+FINGER_NEEDED = re.compile(
+    r"^(/net/reactivated/Fprint/Device/\w+): "
+    r"org\.freedesktop\.DBus\.Properties\.PropertiesChanged "
+    r"\('net\.reactivated\.Fprint\.Device', \{[^}]*'finger-needed': <(true|false)>"
+)
+# gdbus monitor prints these when fprintd's bus name loses / changes owner.
+OWNER_CHANGE = re.compile(rf"^The name {re.escape(BUS_NAME)} (does not have an owner|is owned by )")
 
 stop_evt = threading.Event()
 lock = threading.Lock()
@@ -80,26 +92,31 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     restore()
     proc = subprocess.Popen(
-        ["dbus-monitor", "--system", f"interface='{IFACE}'"],
+        ["gdbus", "monitor", "--system", "--dest", BUS_NAME],
         stdout=subprocess.PIPE, text=True, bufsize=1,
     )
-    pending_status = False   # next arg lines belong to a VerifyStatus/EnrollStatus signal
+    waiting = set()          # device paths whose finger-needed is true
     for line in proc.stdout:
-        line = line.strip()
-        if f"interface={IFACE}" in line and "member=" in line:
-            member = line.rsplit("member=", 1)[1].split()[0]
-            pending_status = member in ("VerifyStatus", "EnrollStatus")
-            if member in START and line.startswith("method call"):
-                start_blink()
-            elif member in STOP and line.startswith("method call"):
-                stop_blink()
+        line = line.rstrip("\n")
+        m = FINGER_NEEDED.match(line)
+        if m:
+            path, value = m.groups()
+            if value == "true":
+                waiting.add(path)
+            else:
+                waiting.discard(path)
+        elif OWNER_CHANGE.match(line):
+            waiting.clear()   # fprintd exited or was replaced: nothing is waiting
+        else:
             continue
-        # VerifyStatus(s result, b done): stop once done == true
-        if pending_status and line.startswith("boolean"):
-            pending_status = False
-            if line.endswith("true"):
-                stop_blink()
-    shutdown()
+        if waiting:
+            start_blink()
+        else:
+            stop_blink()
+    # gdbus ended unexpectedly: restore the LED and exit non-zero so systemd restarts us.
+    stop_blink()
+    restore()
+    sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 [Unit]
 Description=Blink power-button LED while fprintd waits for a finger
-After=dbus.service
+After=dbus.service systemd-udevd.service
 
 [Service]
 Type=simple
@@ -8,9 +8,39 @@ ExecStart=/usr/local/sbin/framework-fingerprint-led-blink
 ExecStopPost=/bin/sh -c 'echo chromeos-auto > /sys/class/leds/chromeos:white:power/trigger'
 Restart=on-failure
 RestartSec=2
+
+# Unprivileged: a throwaway user that may only write the LED (udev rule grants
+# group fprint-led write access to its trigger and brightness files).
+DynamicUser=yes
+SupplementaryGroups=fprint-led
+CapabilityBoundingSet=
+AmbientCapabilities=
 NoNewPrivileges=yes
+
+# Sandbox
+ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

@@ -7,6 +7,9 @@ set -euo pipefail
 NAME=framework-fingerprint-led-blink
 BIN=/usr/local/sbin/$NAME
 UNIT=/etc/systemd/system/$NAME.service
+RULE=/etc/udev/rules.d/90-$NAME.rules
+SYSUSERS=/etc/sysusers.d/$NAME.conf
+GROUP=fprint-led
 LED=/sys/class/leds/chromeos:white:power
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -27,9 +30,15 @@ fi
 do_uninstall() {
     info "Stopping and disabling $NAME"
     systemctl disable --now "$NAME.service" 2>/dev/null || true
-    rm -f "$BIN" "$UNIT"
+    rm -f "$BIN" "$UNIT" "$RULE" "$SYSUSERS"
     systemctl daemon-reload
-    [[ -e $LED/trigger ]] && echo chromeos-auto > "$LED/trigger" || true
+    udevadm control --reload 2>/dev/null || true
+    if [[ -e $LED/trigger ]]; then
+        chown root:root "$LED/trigger" "$LED/brightness" || true
+        chmod 0644 "$LED/trigger" "$LED/brightness" || true
+        echo chromeos-auto > "$LED/trigger" || true
+    fi
+    groupdel "$GROUP" 2>/dev/null || true
     info "Removed. The power LED is back under EC control."
 }
 
@@ -42,7 +51,7 @@ do_install() {
 
     if command -v dnf >/dev/null; then
         # Fedora and derivatives
-        command -v dbus-monitor >/dev/null || pkgs+=(dbus-tools)
+        command -v gdbus        >/dev/null || pkgs+=(glib2)
         command -v python3      >/dev/null || pkgs+=(python3)
         rpm -q fprintd >/dev/null 2>&1     || pkgs+=(fprintd fprintd-pam)
         if ((${#pkgs[@]})); then
@@ -51,15 +60,31 @@ do_install() {
         fi
     elif command -v pacman >/dev/null; then
         # Arch, CachyOS and derivatives (--needed skips what is already installed)
-        info "Installing dependencies: dbus python fprintd"
-        pacman -S --needed --noconfirm dbus python fprintd
+        info "Installing dependencies: glib2 python fprintd"
+        pacman -S --needed --noconfirm glib2 python fprintd
     else
         warn "No dnf or pacman found; skipping dependency installation."
-        warn "Make sure fprintd, dbus-monitor and python3 are installed."
-        for cmd in fprintd-verify dbus-monitor python3; do
+        warn "Make sure fprintd, gdbus (glib2) and python3 are installed."
+        for cmd in fprintd-verify gdbus python3; do
             command -v "$cmd" >/dev/null || warn "missing: $cmd"
         done
     fi
+
+    info "Granting group $GROUP write access to the LED (udev rule)"
+    install -D -m 0644 "$SRC_DIR/packaging/sysusers.conf" "$SYSUSERS"
+    install -D -m 0644 "$SRC_DIR/packaging/90-$NAME.rules" "$RULE"
+    command -v restorecon >/dev/null && restorecon "$SYSUSERS" "$RULE" || true
+    systemd-sysusers "$SYSUSERS"
+    udevadm control --reload
+    udevadm trigger --action=change "$LED"
+    udevadm settle
+    local f
+    for f in trigger brightness; do
+        if [[ $(stat -c %G "$LED/$f") != "$GROUP" ]] || [[ ! -w $LED/$f ]] \
+           || (( ( 8#$(stat -c %a "$LED/$f") & 8#020 ) == 0 )); then
+            die "udev rule did not apply to $LED/$f (expected group $GROUP, g+w)."
+        fi
+    done
 
     info "Installing $BIN and $UNIT"
     install -m 0755 "$SRC_DIR/$NAME" "$BIN"

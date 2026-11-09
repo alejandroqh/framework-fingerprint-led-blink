@@ -15,14 +15,16 @@ offer a setting for this, so this small service adds the visual cue.
 
 ## How it works
 
-- A root systemd service runs `dbus-monitor` on the system bus and watches the
-  fprintd interface `net.reactivated.Fprint.Device`.
-- On `VerifyStart` / `EnrollStart` it takes over the LED
+- An unprivileged, sandboxed systemd service runs
+  `gdbus monitor --system --dest net.reactivated.Fprint`, which only receives
+  signals sent by fprintd itself.
+- fprintd's device property `finger-needed` turns `true` exactly while the
+  sensor is waiting for a finger. Then the service takes over the LED
   `/sys/class/leds/chromeos:white:power` (exposed by the `leds_cros_ec`
   kernel driver) and blinks it: 0.25 s on / 0.25 s off.
-- On `VerifyStop` / `EnrollStop` / `Release`, or a final `VerifyStatus`
-  (`done = true`), it stops and hands the LED back to the embedded controller
-  (`chromeos-auto` trigger).
+- When `finger-needed` turns `false` (match, no match, cancel, timeout) or
+  fprintd goes away, it stops and hands the LED back to the embedded
+  controller (`chromeos-auto` trigger).
 - Safety nets: blinking never lasts more than 60 s, and the LED is restored
   when the service stops (including `ExecStopPost`).
 
@@ -41,9 +43,13 @@ restores SELinux labels (where present) and enables the service.
 
 | Distro | Dependencies installed |
 |---|---|
-| Fedora and derivatives (`dnf`) | `dbus-tools`, `python3`, `fprintd`, `fprintd-pam` |
-| Arch, CachyOS and derivatives (`pacman`) | `dbus`, `python`, `fprintd` |
-| Others | none: install `fprintd`, `dbus-monitor` and `python3` yourself first |
+| Fedora and derivatives (`dnf`) | `glib2` (for `gdbus`), `python3`, `fprintd`, `fprintd-pam` |
+| Arch, CachyOS and derivatives (`pacman`) | `glib2`, `python`, `fprintd` |
+| Others | none: install `fprintd`, `gdbus` (glib2) and `python3` yourself first |
+
+Requires fprintd 1.92 or newer (for the `finger-needed` property) and systemd.
+
+Upgrading from an earlier version: pull and re-run `./install.sh`.
 
 Test it:
 
@@ -62,7 +68,40 @@ Uninstall:
 | File | Purpose |
 |---|---|
 | `/usr/local/sbin/framework-fingerprint-led-blink` | the watcher (Python, stdlib only) |
-| `/etc/systemd/system/framework-fingerprint-led-blink.service` | systemd unit |
+| `/etc/systemd/system/framework-fingerprint-led-blink.service` | systemd unit (unprivileged, sandboxed) |
+| `/etc/udev/rules.d/90-framework-fingerprint-led-blink.rules` | gives group `fprint-led` write access to the LED's `trigger` and `brightness` only |
+| `/etc/sysusers.d/framework-fingerprint-led-blink.conf` | creates the `fprint-led` group |
+
+## Security
+
+The first version ran as root, watched fprintd method calls with `dbus-monitor`
+and trusted any matching message on the bus. As reported on r/framework, any
+local user could start the blinking with a fake `VerifyStart` call, or stop it
+during a real prompt with a spoofed `VerifyStatus` signal. It also ran as root
+with almost no sandbox, as pointed out by
+[u/Kotentopf](https://www.reddit.com/user/Kotentopf). Thanks for the security
+review!
+
+Current design:
+
+- **No spoofing.** Only signals whose sender is the real owner of
+  `net.reactivated.Fprint` are received (the bus stamps the sender; it can't
+  be forged), and only fprintd's own `finger-needed` state is used. A rejected
+  `VerifyStart` never sets it.
+- **No root.** The service runs as a throwaway `DynamicUser` with no
+  capabilities. The udev rule lets it write two files: the LED's `trigger` and
+  `brightness`.
+- **Sandboxed.** Read-only filesystem, no network, private `/tmp` and `/dev`,
+  syscall filter, `NoNewPrivileges`, `MemoryDenyWriteExecute` and more.
+  `systemd-analyze security framework-fingerprint-led-blink` rates it
+  **0.6 SAFE**.
+
+Verified on the reference system: the fake `VerifyStart`, spoofed
+`VerifyStatus` and spoofed `PropertiesChanged` signals (exact fprintd format)
+from an unprivileged user have no effect, while real prompts still blink.
+
+Accepted limit: a user logged in at the machine can make it blink by starting
+a real fingerprint verification, because then fprintd really is waiting.
 
 ### Tuning
 
@@ -94,7 +133,7 @@ Tested it on another model or distro? Open an issue or PR to add it here.
 
 ### Reference system
 
-Developed, tested and installed on 2026-11-08.
+Developed and tested on 2026-11-08; secured version tested on 2026-11-09.
 
 #### Software
 
@@ -107,7 +146,7 @@ Developed, tested and installed on 2026-11-08.
 | PAM | 1.7.2-4.fc45 |
 | systemd | 262.1-1.fc45 |
 | dbus-broker | 37-9.fc45 |
-| dbus-tools (`dbus-monitor`) | 1.16.2-6.fc45 |
+| glib2 (`gdbus`) | 2.90.1-1.fc45 |
 | Python | 3.15.0-1.fc45 |
 | Desktop | KDE Plasma 6.8.2 (Wayland) |
 | SELinux | enforcing |
@@ -125,13 +164,23 @@ Developed, tested and installed on 2026-11-08.
 ## Ports
 
 - **NixOS**: [sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink)
-  by [u/Sophronesis0](https://www.reddit.com/user/Sophronesis0)
+  by [u/Sophronesis0](https://www.reddit.com/user/Sophronesis0) (ported from
+  the first, root-based version)
 
 ## Troubleshooting
 
 ```bash
 systemctl status framework-fingerprint-led-blink
 journalctl -u framework-fingerprint-led-blink -b
+```
+
+If the service fails to start on an unusual Python build, `MemoryDenyWriteExecute`
+is the most likely cause; disable it with `sudo systemctl edit
+framework-fingerprint-led-blink` and add:
+
+```ini
+[Service]
+MemoryDenyWriteExecute=no
 ```
 
 If the LED ever gets stuck, return it to the EC manually:
