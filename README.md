@@ -15,9 +15,9 @@ offer a setting for this, so this small service adds the visual cue.
 
 ## How it works
 
-- An unprivileged, sandboxed systemd service runs
-  `gdbus monitor --system --dest net.reactivated.Fprint`, which only receives
-  signals sent by fprintd itself.
+- An unprivileged service (systemd with a sandbox, or runit on Void Linux)
+  runs `gdbus monitor --system --dest net.reactivated.Fprint`, which only
+  receives signals sent by fprintd itself.
 - fprintd's device property `finger-needed` turns `true` exactly while the
   sensor is waiting for a finger. Then the service takes over the power-button
   LED (exposed by the `leds_cros_ec` kernel driver) and blinks it white:
@@ -32,8 +32,10 @@ offer a setting for this, so this small service adds the visual cue.
   fprintd goes away, it stops and hands the LED back to the embedded
   controller (`chromeos-auto` trigger). Blinking resumes if the finger is
   lifted while the sensor still wants one (e.g. a bad scan).
-- Safety nets: blinking never lasts more than 60 s, and the LED is restored
-  when the service stops (including `ExecStopPost`).
+- Safety nets: one blink cycle never lasts more than 60 s (after that, only a
+  new change reported by fprintd can start another), and the LED is restored
+  when the service stops (including `ExecStopPost` on systemd and the `finish`
+  hook on runit).
 
 Nothing in fprintd, libfprint, PAM or the sensor firmware is modified.
 
@@ -54,42 +56,9 @@ restores SELinux labels (where present) and enables the service.
 | Arch, CachyOS and derivatives (`pacman`) | `glib2`, `python`, `fprintd` |
 | Others | none: install `fprintd`, `gdbus` (glib2) and `python3` yourself first |
 
-Requires fprintd 1.92 or newer (for the `finger-needed` property) and systemd.
-
-### Void Linux (runit)
-
-Use the separate runit installer on Void:
-
-```bash
-./install-void.sh --check
-./install-void.sh
-fprintd-verify
-```
-
-The installer uses `doas` when available, otherwise `sudo`. Dependencies must
-already be installed: `python3`, `glib` (for `gdbus`), `fprintd`, `runit`,
-`util-linux` (for `setpriv`), `shadow`, and `eudev`. It does not change PAM or
-fingerprint enrollment.
-
-The watcher runs as a dedicated, non-login `fprint-led` system user with
-`no_new_privs`, using the same udev rule and fprintd signals as the systemd
-version. Runit does not apply the additional systemd sandbox listed below.
-The service lives in `/etc/sv/framework-fingerprint-led-blink` and is enabled
-through `/var/service`. Its `finish` hook restores firmware LED control even
-after a forced watcher exit. The watcher also stops its `gdbus` child on normal
-shutdown. Logs rotate in `/var/log/framework-fingerprint-led-blink`.
-
-```bash
-doas sv status framework-fingerprint-led-blink
-doas tail -f /var/log/framework-fingerprint-led-blink/current
-./install-void.sh --uninstall
-```
-
-Uninstall retains logs and the locked service account. Re-run the installer to
-update an existing installation. `--check` is read-only; it checks dependencies
-and the LED interface, but does not perform a physical blink test.
-
-The existing systemd installation instructions continue below.
+Requires fprintd 1.92 or newer (for the `finger-needed` property), Python 3.8
+or newer, and systemd. On Void Linux, which uses runit, see
+[Void Linux (runit)](#void-linux-runit) below.
 
 Upgrading from an earlier version: pull and re-run `./install.sh`.
 
@@ -105,14 +74,53 @@ Uninstall:
 ./install.sh --uninstall
 ```
 
+### Void Linux (runit)
+
+Void uses runit instead of systemd, so it has its own installer:
+
+```bash
+./install-void.sh --check
+./install-void.sh
+fprintd-verify
+```
+
+The installer uses `doas` when available, otherwise `sudo`. Dependencies must
+already be installed: `python3`, `glib` (for `gdbus`), `fprintd`, `runit`,
+`util-linux` (for `setpriv`), `shadow`, and `eudev`. It does not change PAM or
+fingerprint enrollment.
+
+The watcher runs as a dedicated, non-login `fprint-led` system user with
+`no_new_privs`, using the same udev rule and fprintd signals as the systemd
+version. Runit does not apply the systemd sandbox; see [Security](#security).
+The service lives in `/etc/sv/framework-fingerprint-led-blink` and is enabled
+through `/var/service`. Its `finish` hook restores firmware LED control even
+after a forced watcher exit. The watcher also stops its `gdbus` child on normal
+shutdown. Logs rotate in `/var/log/framework-fingerprint-led-blink`.
+
+```bash
+doas sv status framework-fingerprint-led-blink
+doas tail -f /var/log/framework-fingerprint-led-blink/current
+./install-void.sh --uninstall
+```
+
+Uninstall retains logs and the locked service account. Re-run the installer to
+update an existing installation. `--check` is read-only; it checks dependencies
+and the LED interface, but does not perform a physical blink test.
+
 ### Installed files
 
-| File | Purpose |
-|---|---|
-| `/usr/local/sbin/framework-fingerprint-led-blink` | the watcher (Python, stdlib only) |
-| `/etc/systemd/system/framework-fingerprint-led-blink.service` | systemd unit (unprivileged, sandboxed) |
-| `/etc/udev/rules.d/90-framework-fingerprint-led-blink.rules` | gives group `fprint-led` write access to the LED's `trigger`, `brightness` and `multi_intensity` only |
-| `/etc/sysusers.d/framework-fingerprint-led-blink.conf` | creates the `fprint-led` group |
+| File | Installed on | Purpose |
+|---|---|---|
+| `/usr/local/sbin/framework-fingerprint-led-blink` | all | the watcher (Python, stdlib only) |
+| `/etc/udev/rules.d/90-framework-fingerprint-led-blink.rules` | all | gives group `fprint-led` write access to the LED's `trigger`, `brightness` and `multi_intensity` only |
+| `/etc/systemd/system/framework-fingerprint-led-blink.service` | systemd | systemd unit (unprivileged, sandboxed) |
+| `/etc/sysusers.d/framework-fingerprint-led-blink.conf` | systemd | creates the `fprint-led` group |
+| `/etc/sv/framework-fingerprint-led-blink/` | Void | runit service: `run`, `finish` and `log/run` |
+| `/var/service/framework-fingerprint-led-blink` | Void | symlink that enables the service |
+| `/var/log/framework-fingerprint-led-blink/` | Void | service logs (kept on uninstall) |
+
+On Void the installer also creates the `fprint-led` user and group with
+`useradd` and `groupadd`; they are kept on uninstall.
 
 ## Security
 
@@ -128,15 +136,24 @@ Current design:
 
 - **No spoofing.** Only signals whose sender is the real owner of
   `net.reactivated.Fprint` are received (the bus stamps the sender; it can't
-  be forged), and only fprintd's own `finger-needed` state can start blinking
-  (`finger-present` can only stop it). A rejected `VerifyStart` never sets it.
-- **No root.** The service runs as a throwaway `DynamicUser` with no
-  capabilities. The udev rule lets it write only the LED's `trigger`,
+  be forged). The LED blinks only while fprintd's own `finger-needed` state
+  is true; `finger-present` pauses it while a finger is on the sensor and
+  cannot start it on its own. A rejected `VerifyStart` never sets
+  `finger-needed`.
+- **No root.** On systemd the service runs as a throwaway `DynamicUser` with
+  no capabilities. The udev rule lets it write only the LED's `trigger`,
   `brightness` and `multi_intensity` (color) files.
-- **Sandboxed.** Read-only filesystem, no network, private `/tmp` and `/dev`,
-  syscall filter, `NoNewPrivileges`, `MemoryDenyWriteExecute` and more.
+- **Sandboxed (systemd only).** Read-only filesystem, no network, private
+  `/tmp` and `/dev`, syscall filter, `NoNewPrivileges`,
+  `MemoryDenyWriteExecute` and more.
   `systemd-analyze security framework-fingerprint-led-blink` rates it
   **0.6 SAFE**.
+- **Void Linux (runit): unprivileged, but not sandboxed.** The watcher runs
+  as the dedicated `fprint-led` user with `no_new_privs` and the same udev
+  rule. Runit has no equivalent of the systemd sandbox, so the filesystem,
+  network and syscall restrictions above do not apply. Two helpers run as
+  root: the `finish` hook, which only writes `chromeos-auto` to the LED
+  trigger, and the `svlogd` logger.
 
 Verified on the reference system: the fake `VerifyStart`, spoofed
 `VerifyStatus` and spoofed `PropertiesChanged` signals (exact fprintd format)
@@ -148,7 +165,7 @@ a real fingerprint verification, because then fprintd really is waiting.
 ### Tuning
 
 Edit the constants at the top of `framework-fingerprint-led-blink` (`ON_S`, `OFF_S`,
-`MAX_BLINK_S`, `LED`) and re-run `./install.sh`.
+`MAX_BLINK_S`, `LED`) and re-run the installer.
 
 ## Tested on
 
@@ -176,6 +193,10 @@ Native Arch and CachyOS support in the installer was contributed by
 [@JoshCodeStuff](https://github.com/JoshCodeStuff) in
 [#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2);
 the Arch and CachyOS reports above predate it.
+Void Linux (runit) support, and stopping the blink as soon as a finger touches
+the sensor, were contributed by [@rehanzo](https://github.com/rehanzo) in
+[#3](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/3) and
+[#4](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/4).
 
 Tested it on another model or distro? Open an issue or PR to add it here.
 
@@ -221,6 +242,9 @@ Developed and tested on 2026-11-08; secured version tested on 2026-11-09.
 systemctl status framework-fingerprint-led-blink
 journalctl -u framework-fingerprint-led-blink -b
 ```
+
+On Void Linux, use the `sv status` and log commands from the
+[Void section](#void-linux-runit) instead.
 
 If the service fails to start on an unusual Python build, `MemoryDenyWriteExecute`
 is the most likely cause; disable it with `sudo systemctl edit
