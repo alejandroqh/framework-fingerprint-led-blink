@@ -1,19 +1,20 @@
 #!/usr/bin/python3 -I
 """Blink the Framework Laptop (13 / 16) power-button LED while fprintd waits for a finger.
 
-Runs unprivileged. Subscribes (via `gdbus monitor --dest`) only to signals sent
-by the current owner of net.reactivated.Fprint; the bus stamps the sender, so
-other users cannot spoof them. The LED blinks while fprintd's own
+Runs unprivileged. Listens on the system bus and acts only on signals whose
+sender is the current owner of net.reactivated.Fprint; the bus stamps the
+sender, so other users cannot spoof them. The LED blinks while fprintd's own
 `finger-needed` device property is true and `finger-present` is false, and is
 always handed back to the EC (chromeos-auto) when a finger touches the sensor,
 `finger-needed` turns false, fprintd goes away, or after a safety timeout.
 """
 import os
-import re
 import signal
-import subprocess
 import sys
 import threading
+
+from jeepney import HeaderFields, MatchRule, Message, MessageType, message_bus
+from jeepney.io.blocking import open_dbus_connection
 
 LED = "/sys/class/leds/chromeos:white:power"
 # Older Framework 13 (Intel 11th-13th gen) expose the power LED as a
@@ -23,22 +24,28 @@ COLOR = "white"           # channel to light on multicolor LEDs
 ON_S, OFF_S = 0.25, 0.25
 MAX_BLINK_S = 60          # safety: never blink longer than this
 BUS_NAME = "net.reactivated.Fprint"
+DEVICE_IFACE = f"{BUS_NAME}.Device"
+DEVICE_PATHS = "/net/reactivated/Fprint/Device"
+DBUS = "org.freedesktop.DBus"
 
-# gdbus monitor line for a property change on a device object, e.g.
-# /net/reactivated/Fprint/Device/0: org.freedesktop.DBus.Properties.PropertiesChanged
-#   ('net.reactivated.Fprint.Device', {'finger-needed': <false>, 'finger-present': <false>}, @as [])
-DEVICE_PROPS = re.compile(
-    r"^(/net/reactivated/Fprint/Device/\w+): "
-    r"org\.freedesktop\.DBus\.Properties\.PropertiesChanged "
-    r"\('net\.reactivated\.Fprint\.Device', \{([^}]*)\}"
+# Signals to subscribe to. The bus resolves the well-known sender name to
+# fprintd's current owner, but anyone may also send a signal straight to us and
+# the bus delivers it regardless of these rules, so handle() re-checks senders.
+PROPS_RULE = MatchRule(
+    type="signal", sender=BUS_NAME, interface=f"{DBUS}.Properties",
+    member="PropertiesChanged", path_namespace=DEVICE_PATHS,
 )
-FINGER_PROP = re.compile(r"'finger-(needed|present)': <(true|false)>")
-# gdbus monitor prints these when fprintd's bus name loses / changes owner.
-OWNER_CHANGE = re.compile(rf"^The name {re.escape(BUS_NAME)} (does not have an owner|is owned by )")
+PROPS_RULE.add_arg_condition(0, DEVICE_IFACE)
+OWNER_RULE = MatchRule(type="signal", sender=DBUS, interface=DBUS, member="NameOwnerChanged")
+OWNER_RULE.add_arg_condition(0, BUS_NAME)
 
 stop_evt = threading.Event()
 lock = threading.Lock()
 blinker = None
+
+fprintd: str | None = None   # fprintd's unique bus name (e.g. ":1.452") while it runs
+# Device paths whose finger-needed / finger-present property is true.
+flags: dict[str, set[str]] = {"finger-needed": set(), "finger-present": set()}
 
 
 if not os.path.exists(f"{LED}/trigger") and os.path.exists(f"{LED_FALLBACK}/trigger"):
@@ -118,6 +125,41 @@ def stop_blink():
         t.join(timeout=2)
 
 
+def handle(msg: Message) -> None:
+    """Apply one signal from the bus, then start or stop blinking to match."""
+    global fprintd
+    fields = msg.header.fields
+    sender = fields.get(HeaderFields.sender)
+    path = fields.get(HeaderFields.path, "")
+    match fields.get(HeaderFields.member), msg.body:
+        case "NameOwnerChanged", (str(name), str(), str(new_owner)) if (
+            sender == DBUS and name == BUS_NAME
+        ):
+            # fprintd started, exited or was replaced: nothing is waiting.
+            fprintd = new_owner or None
+            for paths in flags.values():
+                paths.clear()
+        case "PropertiesChanged", (str(iface), dict(changed), list()) if (
+            fprintd is not None and sender == fprintd and iface == DEVICE_IFACE
+            and path.startswith(f"{DEVICE_PATHS}/")
+        ):
+            for prop, paths in flags.items():
+                match changed.get(prop):
+                    case ("b", True):
+                        paths.add(path)
+                    case ("b", False):
+                        paths.discard(path)
+        case _:
+            return
+    # Stop as soon as a finger touches: fprintd keeps finger-needed true for
+    # ~1.4 s after a match. finger-present can only suppress blinking, never
+    # start it.
+    if flags["finger-needed"] - flags["finger-present"]:
+        start_blink()
+    else:
+        stop_blink()
+
+
 def shutdown(*_):
     # Unwind first: a signal can arrive while start_blink holds the lock.
     # Cleanup in main's finally block must run after that lock is released.
@@ -125,54 +167,32 @@ def shutdown(*_):
 
 
 def main():
+    global fprintd
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
     restore()
-    proc = subprocess.Popen(
-        ["gdbus", "monitor", "--system", "--dest", BUS_NAME],
-        stdout=subprocess.PIPE, text=True, bufsize=1,
-    )
     try:
-        # Device paths whose finger-needed / finger-present property is true.
-        flags = {"needed": set(), "present": set()}
-        for line in proc.stdout:
-            line = line.rstrip("\n")
-            if m := DEVICE_PROPS.match(line):
-                path, props = m.groups()
-                changes = FINGER_PROP.findall(props)
-                if not changes:
-                    continue
-                for prop, value in changes:
-                    if value == "true":
-                        flags[prop].add(path)
-                    else:
-                        flags[prop].discard(path)
-            elif OWNER_CHANGE.match(line):
-                # fprintd exited or was replaced: nothing is waiting
-                for paths in flags.values():
-                    paths.clear()
-            else:
-                continue
-            # Stop as soon as a finger touches: fprintd keeps finger-needed
-            # true for ~1.4 s after a match. finger-present can only suppress
-            # blinking, never start it.
-            if flags["needed"] - flags["present"]:
-                start_blink()
-            else:
-                stop_blink()
+        # Filter before subscribing, so signals that arrive while we wait for
+        # the replies below are queued rather than dropped.
+        with open_dbus_connection(bus="SYSTEM") as conn, \
+                conn.filter(MatchRule(type="signal"), bufsize=64) as signals:
+            for rule in (PROPS_RULE, OWNER_RULE):
+                reply = conn.send_and_get_reply(message_bus.AddMatch(rule))
+                if reply.header.message_type == MessageType.error:
+                    sys.exit(f"AddMatch failed: {reply.body}")
+            # A NameOwnerChanged racing this lookup is queued and applied after it.
+            reply = conn.send_and_get_reply(message_bus.GetNameOwner(BUS_NAME))
+            if reply.header.message_type == MessageType.method_return:
+                fprintd = reply.body[0]
+            # Otherwise fprintd is not running yet; the bus starts it on demand.
+            while True:
+                handle(conn.recv_until_filtered(signals))
+    except ConnectionError as e:
+        print(f"D-Bus connection lost: {e}", file=sys.stderr)
     finally:
         stop_blink()
         restore()
-        # runit does not have systemd's cgroup cleanup: reap our monitor ourselves.
-        if proc.poll() is None:
-            proc.terminate()
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
-        proc.stdout.close()
-    # Unexpected monitor exit: let the service supervisor restart us.
+    # Let the service supervisor restart us.
     sys.exit(1)
 
 

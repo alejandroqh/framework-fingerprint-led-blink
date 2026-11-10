@@ -58,8 +58,8 @@ do_install() {
 
     if command -v dnf >/dev/null; then
         # Fedora and derivatives
-        command -v gdbus        >/dev/null || pkgs+=(glib2)
         command -v python3      >/dev/null || pkgs+=(python3)
+        rpm -q python3-jeepney >/dev/null 2>&1 || pkgs+=(python3-jeepney)
         rpm -q fprintd >/dev/null 2>&1     || pkgs+=(fprintd fprintd-pam)
         if ((${#pkgs[@]})); then
             info "Installing dependencies: ${pkgs[*]}"
@@ -67,14 +67,15 @@ do_install() {
         fi
     elif command -v pacman >/dev/null; then
         # Arch, CachyOS and derivatives (--needed skips what is already installed)
-        info "Installing dependencies: glib2 python fprintd"
-        pacman -S --needed --noconfirm glib2 python fprintd
+        info "Installing dependencies: python python-jeepney fprintd"
+        pacman -S --needed --noconfirm python python-jeepney fprintd
     else
         warn "No dnf or pacman found; skipping dependency installation."
-        warn "Make sure fprintd, gdbus (glib2) and python3 are installed."
-        for cmd in fprintd-verify gdbus python3; do
+        warn "Make sure fprintd, python3 and jeepney (0.7+) are installed."
+        for cmd in fprintd-verify python3; do
             command -v "$cmd" >/dev/null || warn "missing: $cmd"
         done
+        python3 -I -c 'import jeepney' 2>/dev/null || warn "missing: Python module jeepney"
     fi
 
     info "Granting group $GROUP write access to the LED (udev rule)"
