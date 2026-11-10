@@ -1,0 +1,7 @@
+#!/bin/sh
+exec 2>&1
+export PATH=/usr/bin:/bin
+umask 077
+sv check /var/service/dbus >/dev/null || exit 1
+exec chpst -u fprint-led:fprint-led setpriv --no-new-privs \
+    /usr/bin/python3 -I -u /usr/local/sbin/framework-fingerprint-led-blink

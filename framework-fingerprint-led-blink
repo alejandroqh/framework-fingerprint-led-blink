@@ -116,8 +116,8 @@ def stop_blink():
 
 
 def shutdown(*_):
-    stop_blink()
-    restore()
+    # Unwind first: a signal can arrive while start_blink holds the lock.
+    # Cleanup in main's finally block must run after that lock is released.
     sys.exit(0)
 
 
@@ -129,27 +129,38 @@ def main():
         ["gdbus", "monitor", "--system", "--dest", BUS_NAME],
         stdout=subprocess.PIPE, text=True, bufsize=1,
     )
-    waiting = set()          # device paths whose finger-needed is true
-    for line in proc.stdout:
-        line = line.rstrip("\n")
-        m = FINGER_NEEDED.match(line)
-        if m:
-            path, value = m.groups()
-            if value == "true":
-                waiting.add(path)
+    try:
+        waiting = set()          # device paths whose finger-needed is true
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            m = FINGER_NEEDED.match(line)
+            if m:
+                path, value = m.groups()
+                if value == "true":
+                    waiting.add(path)
+                else:
+                    waiting.discard(path)
+            elif OWNER_CHANGE.match(line):
+                waiting.clear()   # fprintd exited or was replaced: nothing is waiting
             else:
-                waiting.discard(path)
-        elif OWNER_CHANGE.match(line):
-            waiting.clear()   # fprintd exited or was replaced: nothing is waiting
-        else:
-            continue
-        if waiting:
-            start_blink()
-        else:
-            stop_blink()
-    # gdbus ended unexpectedly: restore the LED and exit non-zero so systemd restarts us.
-    stop_blink()
-    restore()
+                continue
+            if waiting:
+                start_blink()
+            else:
+                stop_blink()
+    finally:
+        stop_blink()
+        restore()
+        # runit does not have systemd's cgroup cleanup: reap our monitor ourselves.
+        if proc.poll() is None:
+            proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        proc.stdout.close()
+    # Unexpected monitor exit: let the service supervisor restart us.
     sys.exit(1)
 
 
