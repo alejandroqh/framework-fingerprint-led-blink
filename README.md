@@ -15,9 +15,9 @@ offer a setting for this, so this small service adds the visual cue.
 
 ## How it works
 
-- An unprivileged, sandboxed systemd service runs
-  `gdbus monitor --system --dest net.reactivated.Fprint`, which only receives
-  signals sent by fprintd itself.
+- An unprivileged, sandboxed systemd service listens on the system bus (via
+  the pure-Python [jeepney](https://jeepney.readthedocs.io/) library) and acts
+  only on signals whose sender is fprintd itself.
 - fprintd's device property `finger-needed` turns `true` exactly while the
   sensor is waiting for a finger. Then the service takes over the power-button
   LED (exposed by the `leds_cros_ec` kernel driver) and blinks it white:
@@ -50,9 +50,9 @@ restores SELinux labels (where present) and enables the service.
 
 | Distro | Dependencies installed |
 |---|---|
-| Fedora and derivatives (`dnf`) | `glib2` (for `gdbus`), `python3`, `fprintd`, `fprintd-pam` |
-| Arch, CachyOS and derivatives (`pacman`) | `glib2`, `python`, `fprintd` |
-| Others | none: install `fprintd`, `gdbus` (glib2) and `python3` yourself first |
+| Fedora and derivatives (`dnf`) | `python3`, `python3-jeepney`, `fprintd`, `fprintd-pam` |
+| Arch, CachyOS and derivatives (`pacman`) | `python`, `python-jeepney`, `fprintd` |
+| Others | none: install `fprintd`, `python3` and jeepney 0.7+ yourself first |
 
 Requires fprintd 1.92 or newer (for the `finger-needed` property) and systemd.
 
@@ -67,7 +67,7 @@ fprintd-verify
 ```
 
 The installer uses `doas` when available, otherwise `sudo`. Dependencies must
-already be installed: `python3`, `glib` (for `gdbus`), `fprintd`, `runit`,
+already be installed: `python3`, `python3-jeepney`, `fprintd`, `runit`,
 `util-linux` (for `setpriv`), `shadow`, and `eudev`. It does not change PAM or
 fingerprint enrollment.
 
@@ -76,8 +76,8 @@ The watcher runs as a dedicated, non-login `fprint-led` system user with
 version. Runit does not apply the additional systemd sandbox listed below.
 The service lives in `/etc/sv/framework-fingerprint-led-blink` and is enabled
 through `/var/service`. Its `finish` hook restores firmware LED control even
-after a forced watcher exit. The watcher also stops its `gdbus` child on normal
-shutdown. Logs rotate in `/var/log/framework-fingerprint-led-blink`.
+after a forced watcher exit. Logs rotate in
+`/var/log/framework-fingerprint-led-blink`.
 
 ```bash
 doas sv status framework-fingerprint-led-blink
@@ -194,7 +194,6 @@ Developed and tested on 2026-11-08; secured version tested on 2026-11-09.
 | PAM | 1.7.2-4.fc45 |
 | systemd | 262.1-1.fc45 |
 | dbus-broker | 37-9.fc45 |
-| glib2 (`gdbus`) | 2.90.1-1.fc45 |
 | Python | 3.15.0-1.fc45 |
 | Desktop | KDE Plasma 6.8.2 (Wayland) |
 | SELinux | enforcing |

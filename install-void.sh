@@ -32,9 +32,11 @@ esac
 preflight() {
     [[ -d /etc/sv && -d /var/service ]] || die 'Void runit service directories not found.'
     local cmd
-    for cmd in python3 gdbus fprintd-verify chpst setpriv sv svlogd udevadm groupadd useradd; do
+    for cmd in python3 fprintd-verify chpst setpriv sv svlogd udevadm groupadd useradd; do
         command -v "$cmd" >/dev/null || die "Missing command: $cmd"
     done
+    python3 -I -c 'from jeepney.io.blocking import open_dbus_connection' 2>/dev/null ||
+        die 'Missing Python module: jeepney (install python3-jeepney).'
     [[ -e $LED/trigger ]] || die 'No supported Framework power-button LED found.'
     grep -qw chromeos-auto "$LED/trigger" || die 'LED lacks the chromeos-auto trigger.'
     [[ -e /var/service/dbus/run ]] || die 'Enable the dbus runit service first.'
