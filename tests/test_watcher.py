@@ -13,12 +13,13 @@ from unittest.mock import patch
 WATCHER = Path(__file__).resolve().parents[1] / "framework-fingerprint-led-blink"
 
 
-def needed(value):
+def props(**flags):
+    """A gdbus monitor line, e.g. props(needed="false", present="false")."""
+    body = ", ".join(f"'finger-{name}': <{value}>" for name, value in flags.items())
     return (
         "/net/reactivated/Fprint/Device/0: "
         "org.freedesktop.DBus.Properties.PropertiesChanged "
-        "('net.reactivated.Fprint.Device', {'finger-needed': <"
-        + value + ">}, @as [])\n"
+        "('net.reactivated.Fprint.Device', {" + body + "}, @as [])\n"
     )
 
 
@@ -64,27 +65,56 @@ class WatcherTests(unittest.TestCase):
 
     def test_waiting_starts_and_completion_restores_led(self):
         def stream():
-            yield needed("true")
+            yield props(needed="true")
             self.assert_trigger("none")
             self.wait_for(lambda: (self.led / "brightness").read_text() == "0")
-            yield needed("false")
+            yield props(needed="false")
             self.assert_trigger("chromeos-auto")
+        self.run_stream(stream())
+
+    def test_finger_touch_stops_blink_before_finger_needed_clears(self):
+        # Sequence recorded from fprintd on a match: finger-needed stays true
+        # for ~1.4 s after the touch.
+        def stream():
+            yield props(needed="true")
+            self.assert_trigger("none")
+            yield props(present="true")
+            self.assert_trigger("chromeos-auto")
+            yield props(needed="false", present="false")
+            self.assert_trigger("chromeos-auto")
+        self.run_stream(stream())
+
+    def test_lifted_finger_resumes_blink_while_still_needed(self):
+        def stream():
+            yield props(needed="true")
+            self.assert_trigger("none")
+            yield props(present="true")
+            self.assert_trigger("chromeos-auto")
+            yield props(present="false")
+            self.assert_trigger("none")
+        self.run_stream(stream())
+
+    def test_finger_present_alone_never_blinks(self):
+        def stream():
+            yield props(present="true")
+            yield props(present="false")
+            self.assertEqual((self.led / "trigger").read_text(), "chromeos-auto")
         self.run_stream(stream())
 
     def test_daemon_disappearance_restores_led(self):
         def stream():
-            yield needed("true")
+            yield props(needed="true")
             self.assert_trigger("none")
             yield "The name net.reactivated.Fprint does not have an owner\n"
             self.assert_trigger("chromeos-auto")
         self.run_stream(stream())
 
     def test_unexpected_monitor_exit_restores_led(self):
-        self.run_stream(iter([needed("true")]))
+        self.run_stream(iter([props(needed="true")]))
 
     def test_sigterm_restores_led_and_reaps_monitor(self):
         def stream():
-            yield needed("true")
+            yield props(needed="true")
             self.assert_trigger("none")
             self.watcher.shutdown(signal.SIGTERM, None)
         self.run_stream(stream(), exit_code=0)

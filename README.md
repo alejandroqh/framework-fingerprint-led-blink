@@ -21,15 +21,17 @@ offer a setting for this, so this small service adds the visual cue.
 - fprintd's device property `finger-needed` turns `true` exactly while the
   sensor is waiting for a finger. Then the service takes over the power-button
   LED (exposed by the `leds_cros_ec` kernel driver) and blinks it white:
-  0.25 s on / 0.25 s off.
+  0.25 s off / 0.25 s on, starting dark so the change is visible at once.
   - `chromeos:white:power` on most models.
   - `chromeos:multicolor:power` on older Framework 13 (Intel 11th–13th gen),
     picked automatically. Its default color is red, so the service switches
     it to the white channel while blinking and restores the original colors
     afterwards.
-- When `finger-needed` turns `false` (match, no match, cancel, timeout) or
+- As soon as a finger touches the sensor (`finger-present` turns `true`), or
+  when `finger-needed` turns `false` (match, no match, cancel, timeout), or
   fprintd goes away, it stops and hands the LED back to the embedded
-  controller (`chromeos-auto` trigger).
+  controller (`chromeos-auto` trigger). Blinking resumes if the finger is
+  lifted while the sensor still wants one (e.g. a bad scan).
 - Safety nets: blinking never lasts more than 60 s, and the LED is restored
   when the service stops (including `ExecStopPost`).
 
@@ -126,8 +128,8 @@ Current design:
 
 - **No spoofing.** Only signals whose sender is the real owner of
   `net.reactivated.Fprint` are received (the bus stamps the sender; it can't
-  be forged), and only fprintd's own `finger-needed` state is used. A rejected
-  `VerifyStart` never sets it.
+  be forged), and only fprintd's own `finger-needed` state can start blinking
+  (`finger-present` can only stop it). A rejected `VerifyStart` never sets it.
 - **No root.** The service runs as a throwaway `DynamicUser` with no
   capabilities. The udev rule lets it write only the LED's `trigger`,
   `brightness` and `multi_intensity` (color) files.
