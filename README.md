@@ -54,6 +54,41 @@ restores SELinux labels (where present) and enables the service.
 
 Requires fprintd 1.92 or newer (for the `finger-needed` property) and systemd.
 
+### Void Linux (runit)
+
+Use the separate runit installer on Void:
+
+```bash
+./install-void.sh --check
+./install-void.sh
+fprintd-verify
+```
+
+The installer uses `doas` when available, otherwise `sudo`. Dependencies must
+already be installed: `python3`, `glib` (for `gdbus`), `fprintd`, `runit`,
+`util-linux` (for `setpriv`), `shadow`, and `eudev`. It does not change PAM or
+fingerprint enrollment.
+
+The watcher runs as a dedicated, non-login `fprint-led` system user with
+`no_new_privs`, using the same udev rule and fprintd signals as the systemd
+version. Runit does not apply the additional systemd sandbox listed below.
+The service lives in `/etc/sv/framework-fingerprint-led-blink` and is enabled
+through `/var/service`. Its `finish` hook restores firmware LED control even
+after a forced watcher exit. The watcher also stops its `gdbus` child on normal
+shutdown. Logs rotate in `/var/log/framework-fingerprint-led-blink`.
+
+```bash
+doas sv status framework-fingerprint-led-blink
+doas tail -f /var/log/framework-fingerprint-led-blink/current
+./install-void.sh --uninstall
+```
+
+Uninstall retains logs and the locked service account. Re-run the installer to
+update an existing installation. `--check` is read-only; it checks dependencies
+and the LED interface, but does not perform a physical blink test.
+
+The existing systemd installation instructions continue below.
+
 Upgrading from an earlier version: pull and re-run `./install.sh`.
 
 Test it:

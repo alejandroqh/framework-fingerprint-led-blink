@@ -1,0 +1,9 @@
+#!/bin/sh
+# Runs even when the watcher was killed before its Python cleanup could run.
+for led in /sys/class/leds/chromeos:white:power /sys/class/leds/chromeos:multicolor:power; do
+    if [ -e "$led/trigger" ]; then
+        printf '%s\n' chromeos-auto > "$led/trigger"
+    fi
+done
+# Avoid rapid restart loops if D-Bus or the LED is temporarily unavailable.
+sleep 2
