@@ -4,9 +4,9 @@
 Runs unprivileged. Subscribes (via `gdbus monitor --dest`) only to signals sent
 by the current owner of net.reactivated.Fprint; the bus stamps the sender, so
 other users cannot spoof them. The LED blinks while fprintd's own
-`finger-needed` device property is true, and is always handed back to the EC
-(chromeos-auto) when it turns false, fprintd goes away, or after a safety
-timeout.
+`finger-needed` device property is true and `finger-present` is false, and is
+always handed back to the EC (chromeos-auto) when a finger touches the sensor,
+`finger-needed` turns false, fprintd goes away, or after a safety timeout.
 """
 import os
 import re
@@ -24,14 +24,15 @@ ON_S, OFF_S = 0.25, 0.25
 MAX_BLINK_S = 60          # safety: never blink longer than this
 BUS_NAME = "net.reactivated.Fprint"
 
-# gdbus monitor line for a finger-needed change on a device object, e.g.
+# gdbus monitor line for a property change on a device object, e.g.
 # /net/reactivated/Fprint/Device/0: org.freedesktop.DBus.Properties.PropertiesChanged
-#   ('net.reactivated.Fprint.Device', {'finger-needed': <true>}, @as [])
-FINGER_NEEDED = re.compile(
+#   ('net.reactivated.Fprint.Device', {'finger-needed': <false>, 'finger-present': <false>}, @as [])
+DEVICE_PROPS = re.compile(
     r"^(/net/reactivated/Fprint/Device/\w+): "
     r"org\.freedesktop\.DBus\.Properties\.PropertiesChanged "
-    r"\('net\.reactivated\.Fprint\.Device', \{[^}]*'finger-needed': <(true|false)>"
+    r"\('net\.reactivated\.Fprint\.Device', \{([^}]*)\}"
 )
+FINGER_PROP = re.compile(r"'finger-(needed|present)': <(true|false)>")
 # gdbus monitor prints these when fprintd's bus name loses / changes owner.
 OWNER_CHANGE = re.compile(rf"^The name {re.escape(BUS_NAME)} (does not have an owner|is owned by )")
 
@@ -85,12 +86,14 @@ def blink_loop(evt):
     select_color()
     elapsed = 0.0
     try:
+        # Off first: the power LED is normally lit, so starting with "on"
+        # would show no visible change for the first ON_S.
         while not evt.is_set() and elapsed < MAX_BLINK_S:
-            write("brightness", "100")
-            if evt.wait(ON_S):
-                break
             write("brightness", "0")
             if evt.wait(OFF_S):
+                break
+            write("brightness", "100")
+            if evt.wait(ON_S):
                 break
             elapsed += ON_S + OFF_S
     finally:
@@ -130,21 +133,30 @@ def main():
         stdout=subprocess.PIPE, text=True, bufsize=1,
     )
     try:
-        waiting = set()          # device paths whose finger-needed is true
+        # Device paths whose finger-needed / finger-present property is true.
+        flags = {"needed": set(), "present": set()}
         for line in proc.stdout:
             line = line.rstrip("\n")
-            m = FINGER_NEEDED.match(line)
-            if m:
-                path, value = m.groups()
-                if value == "true":
-                    waiting.add(path)
-                else:
-                    waiting.discard(path)
+            if m := DEVICE_PROPS.match(line):
+                path, props = m.groups()
+                changes = FINGER_PROP.findall(props)
+                if not changes:
+                    continue
+                for prop, value in changes:
+                    if value == "true":
+                        flags[prop].add(path)
+                    else:
+                        flags[prop].discard(path)
             elif OWNER_CHANGE.match(line):
-                waiting.clear()   # fprintd exited or was replaced: nothing is waiting
+                # fprintd exited or was replaced: nothing is waiting
+                for paths in flags.values():
+                    paths.clear()
             else:
                 continue
-            if waiting:
+            # Stop as soon as a finger touches: fprintd keeps finger-needed
+            # true for ~1.4 s after a match. finger-present can only suppress
+            # blinking, never start it.
+            if flags["needed"] - flags["present"]:
                 start_blink()
             else:
                 stop_blink()
