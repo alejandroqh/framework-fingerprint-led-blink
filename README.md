@@ -122,6 +122,49 @@ and the LED interface, but does not perform a physical blink test.
 On Void the installer also creates the `fprint-led` user and group with
 `useradd` and `groupadd`; they are kept on uninstall.
 
+### Arch Linux and derivatives (AUR)
+
+On Arch, CachyOS, Manjaro, EndeavourOS and other Arch-based distros, install
+the [`framework-fingerprint-led-blink`](https://aur.archlinux.org/packages/framework-fingerprint-led-blink)
+package from the AUR with your helper of choice:
+
+```bash
+yay -S framework-fingerprint-led-blink
+# or
+paru -S framework-fingerprint-led-blink
+```
+
+Or build it by hand:
+
+```bash
+git clone https://aur.archlinux.org/framework-fingerprint-led-blink.git
+cd framework-fingerprint-led-blink
+makepkg -si
+```
+
+Then enable the service and test it:
+
+```bash
+sudo systemctl enable --now framework-fingerprint-led-blink.service
+sudo -k; sudo true     # watch the power button before touching it
+```
+
+Dependencies are pulled in by pacman, and updates arrive through your AUR
+helper. To remove it: `sudo pacman -R framework-fingerprint-led-blink`.
+
+The package installs the same files as the installer, but under `/usr`
+(packages must not use `/usr/local` or `/etc`):
+
+| File | Purpose |
+|---|---|
+| `/usr/bin/framework-fingerprint-led-blink` | the watcher |
+| `/usr/lib/systemd/system/framework-fingerprint-led-blink.service` | systemd unit |
+| `/usr/lib/udev/rules.d/90-framework-fingerprint-led-blink.rules` | LED permissions for group `fprint-led` |
+| `/usr/lib/sysusers.d/framework-fingerprint-led-blink.conf` | creates the `fprint-led` group |
+
+The AUR package is not part of this repository's installer, so report
+packaging problems on the AUR page.
+
 ## Security
 
 The first version ran as root, watched fprintd method calls with `dbus-monitor`
@@ -235,6 +278,7 @@ Developed and tested on 2026-11-08; secured version tested on 2026-11-09.
 - **NixOS**: [sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink)
   by [u/Sophronesis0](https://www.reddit.com/user/Sophronesis0) (ported from
   the first, root-based version)
+- **Arch Linux and derivatives**: [AUR package](https://aur.archlinux.org/packages/framework-fingerprint-led-blink)
 
 ## Troubleshooting
 
