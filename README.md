@@ -42,26 +42,32 @@ Nothing in fprintd, libfprint, PAM or the sensor firmware is modified.
 
 ## Install
 
+| Platform | Install with | Dependencies | Maintained by |
+|---|---|---|---|
+| Fedora and derivatives | [`./install.sh`](#linux-with-systemd) | installed for you: `glib2` (for `gdbus`), `python3`, `fprintd`, `fprintd-pam` | this repo |
+| Arch, CachyOS and derivatives | [`./install.sh`](#linux-with-systemd) | installed for you: `glib2`, `python`, `fprintd` | this repo |
+| Arch, CachyOS and derivatives | [AUR package](#arch-linux-and-derivatives-aur) | pulled in by pacman | the AUR package |
+| Debian, Ubuntu and derivatives | [`./install.sh`](#linux-with-systemd) | installed for you: `libglib2.0-bin` (for `gdbus`), `python3`, `fprintd`, `libpam-fprintd` | this repo |
+| Other Linux with systemd | [`./install.sh`](#linux-with-systemd) | install first: `fprintd`, `gdbus` (glib2), `python3` | this repo |
+| Void Linux (runit) | [`./install-void.sh`](#void-linux-runit) | install first: `python3`, `glib`, `fprintd`, `runit`, `util-linux`, `shadow`, `eudev` | this repo |
+| NixOS | [flake + NixOS module](#nixos) | handled by the flake | [@sophronesis](https://github.com/sophronesis), [own repo](https://github.com/sophronesis/nix-framework-fingerprint-led-blink) |
+| Windows | [`.\install-task.ps1`](#windows) | `framework_tool` (via `winget`) | [@spike1478](https://github.com/spike1478), [own repo](https://github.com/spike1478/framework-power-led-blink-windows) |
+
+On Linux, all methods need fprintd 1.92 or newer (for the `finger-needed`
+property). Report problems with NixOS, Windows or the AUR package in their own
+repositories.
+
+### Linux with systemd
+
 ```bash
 git clone https://github.com/alejandroqh/framework-fingerprint-led-blink.git
 cd framework-fingerprint-led-blink
 ./install.sh
 ```
 
-The installer asks for sudo, installs missing dependencies, copies the files,
-restores SELinux labels (where present) and enables the service.
-
-| Distro | Dependencies installed |
-|---|---|
-| Fedora and derivatives (`dnf`) | `glib2` (for `gdbus`), `python3`, `fprintd`, `fprintd-pam` |
-| Arch, CachyOS and derivatives (`pacman`) | `glib2`, `python`, `fprintd` |
-| Debian, Ubuntu and derivatives (`apt`) | `libglib2.0-bin` (for `gdbus`), `python3`, `fprintd`, `libpam-fprintd` |
-| Others | none: install `fprintd`, `gdbus` (glib2) and `python3` yourself first |
-
-Requires fprintd 1.92 or newer (for the `finger-needed` property), Python 3.8
-or newer, and systemd. On Void Linux, which uses runit, see
-[Void Linux (runit)](#void-linux-runit) below; on NixOS, see [NixOS](#nixos);
-on Windows, see [Windows](#windows).
+The installer asks for sudo, installs missing dependencies (`dnf`, `pacman` or
+`apt`, see the table above), copies the files, restores SELinux labels (where
+present) and enables the service. Requires Python 3.8 or newer and systemd.
 
 Upgrading from an earlier version: pull and re-run `./install.sh`.
 
@@ -176,7 +182,21 @@ written and maintained by [@sophronesis](https://github.com/sophronesis)
 ([u/Sophronesis0](https://www.reddit.com/user/Sophronesis0)):
 [sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink).
 
-Follow its README to install and configure it, and report NixOS problems
+From its README:
+
+```nix
+# flake.nix
+inputs.nix-framework-fingerprint-led-blink = {
+  url = "github:sophronesis/nix-framework-fingerprint-led-blink";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+
+# in nixosSystem modules
+imports = [ inputs.nix-framework-fingerprint-led-blink.nixosModules.default ];
+services.framework-fingerprint-led-blink.enable = true;
+```
+
+See its README for the options (LED, timings), and report NixOS problems
 there.
 
 ### Windows
