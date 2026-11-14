@@ -301,6 +301,10 @@ Developed and tested on 2026-11-08; secured version tested on 2026-11-09.
 ## Ports
 
 - **Arch Linux and derivatives**: [AUR package](https://aur.archlinux.org/packages/framework-fingerprint-led-blink)
+- **Windows**: [spike1478/framework-power-led-blink-windows](https://github.com/spike1478/framework-power-led-blink-windows)
+  by [@spike1478](https://github.com/spike1478), a separate PowerShell
+  implementation. Windows has no fprintd, so it blinks while the lock screen,
+  UAC or credential prompts are open, driving the LED through `framework_tool`.
 
 ## Troubleshooting
 
