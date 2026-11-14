@@ -170,27 +170,14 @@ packaging problems on the AUR page.
 
 ### NixOS
 
-Use the flake in
-[alejandroqh/nix-framework-fingerprint-led-blink](https://github.com/alejandroqh/nix-framework-fingerprint-led-blink).
-It packages this repo and adds a NixOS module with the same udev rule and
-sandboxed, unprivileged unit:
+NixOS is supported through a flake that packages this repo and adds a NixOS
+module with the same udev rule and sandboxed, unprivileged unit. It is
+written and maintained by [@sophronesis](https://github.com/sophronesis)
+([u/Sophronesis0](https://www.reddit.com/user/Sophronesis0)):
+[sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink).
 
-```nix
-# flake.nix
-inputs.nix-framework-fingerprint-led-blink = {
-  url = "github:alejandroqh/nix-framework-fingerprint-led-blink";
-  inputs.nixpkgs.follows = "nixpkgs";
-};
-
-# in nixosSystem modules
-imports = [ inputs.nix-framework-fingerprint-led-blink.nixosModules.default ];
-services.framework-fingerprint-led-blink.enable = true;
-```
-
-See that README for the options (LED, timings). The flake was written by
-[u/Sophronesis0](https://www.reddit.com/user/Sophronesis0)
-([sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink),
-for the first, root-based version); the fork follows the current version.
+Follow its README to install and configure it, and report NixOS problems
+there.
 
 ### Windows
 
