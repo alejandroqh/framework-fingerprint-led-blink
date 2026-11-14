@@ -58,7 +58,7 @@ restores SELinux labels (where present) and enables the service.
 
 Requires fprintd 1.92 or newer (for the `finger-needed` property), Python 3.8
 or newer, and systemd. On Void Linux, which uses runit, see
-[Void Linux (runit)](#void-linux-runit) below.
+[Void Linux (runit)](#void-linux-runit) below; on NixOS, see [NixOS](#nixos).
 
 Upgrading from an earlier version: pull and re-run `./install.sh`.
 
@@ -164,6 +164,30 @@ The package installs the same files as the installer, but under `/usr`
 
 The AUR package is not part of this repository's installer, so report
 packaging problems on the AUR page.
+
+### NixOS
+
+Use the flake in
+[alejandroqh/nix-framework-fingerprint-led-blink](https://github.com/alejandroqh/nix-framework-fingerprint-led-blink).
+It packages this repo and adds a NixOS module with the same udev rule and
+sandboxed, unprivileged unit:
+
+```nix
+# flake.nix
+inputs.nix-framework-fingerprint-led-blink = {
+  url = "github:alejandroqh/nix-framework-fingerprint-led-blink";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+
+# in nixosSystem modules
+imports = [ inputs.nix-framework-fingerprint-led-blink.nixosModules.default ];
+services.framework-fingerprint-led-blink.enable = true;
+```
+
+See that README for the options (LED, timings). The flake was written by
+[u/Sophronesis0](https://www.reddit.com/user/Sophronesis0)
+([sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink),
+for the first, root-based version); the fork follows the current version.
 
 ## Security
 
@@ -275,9 +299,6 @@ Developed and tested on 2026-11-08; secured version tested on 2026-11-09.
 
 ## Ports
 
-- **NixOS**: [sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink)
-  by [u/Sophronesis0](https://www.reddit.com/user/Sophronesis0) (ported from
-  the first, root-based version)
 - **Arch Linux and derivatives**: [AUR package](https://aur.archlinux.org/packages/framework-fingerprint-led-blink)
 
 ## Troubleshooting
