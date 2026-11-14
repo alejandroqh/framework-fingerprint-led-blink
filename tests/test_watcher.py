@@ -124,6 +124,12 @@ class WatcherTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 self.watcher.shutdown(signal.SIGTERM, None)
 
+    def test_restore_leaves_active_trigger_alone(self):
+        # Rewriting the active trigger flickers the LED (issue #8).
+        (self.led / "trigger").write_text("none [chromeos-auto] timer")
+        self.watcher.restore()
+        self.assertEqual((self.led / "trigger").read_text(), "none [chromeos-auto] timer")
+
     def test_safety_timeout_restores_led(self):
         self.watcher.MAX_BLINK_S = 0.04
         self.watcher.start_blink()

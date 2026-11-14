@@ -1,7 +1,8 @@
 #!/bin/sh
 # Runs even when the watcher was killed before its Python cleanup could run.
 for led in /sys/class/leds/chromeos:white:power /sys/class/leds/chromeos:multicolor:power; do
-    if [ -e "$led/trigger" ]; then
+    # Skip when already active: rewriting the trigger flickers the LED.
+    if [ -e "$led/trigger" ] && ! grep -qF '[chromeos-auto]' "$led/trigger"; then
         printf '%s\n' chromeos-auto > "$led/trigger"
     fi
 done

@@ -78,7 +78,10 @@ def restore():
     if saved_intensity is not None:
         write("multi_intensity", saved_intensity)
         saved_intensity = None
-    write("trigger", "chromeos-auto")
+    # Every trigger write turns the LED off and on again, even for the active
+    # trigger, so a crash-looping service would look like constant blinking.
+    if "[chromeos-auto]" not in (read("trigger") or ""):
+        write("trigger", "chromeos-auto")
 
 
 def blink_loop(evt):

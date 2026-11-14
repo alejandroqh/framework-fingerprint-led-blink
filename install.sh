@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installer for framework-fingerprint-led-blink (Fedora / Arch; others: deps by hand).
+# Installer for framework-fingerprint-led-blink (Fedora / Arch / Debian, Ubuntu; others: deps by hand).
 #   ./install.sh             install / update and start the service
 #   ./install.sh --uninstall stop, disable and remove everything
 set -euo pipefail
@@ -69,8 +69,17 @@ do_install() {
         # Arch, CachyOS and derivatives (--needed skips what is already installed)
         info "Installing dependencies: glib2 python fprintd"
         pacman -S --needed --noconfirm glib2 python fprintd
+    elif command -v apt-get >/dev/null; then
+        # Debian, Ubuntu and derivatives
+        command -v gdbus        >/dev/null || pkgs+=(libglib2.0-bin)
+        command -v python3      >/dev/null || pkgs+=(python3)
+        dpkg -s fprintd >/dev/null 2>&1    || pkgs+=(fprintd libpam-fprintd)
+        if ((${#pkgs[@]})); then
+            info "Installing dependencies: ${pkgs[*]}"
+            apt-get install -y "${pkgs[@]}"
+        fi
     else
-        warn "No dnf or pacman found; skipping dependency installation."
+        warn "No dnf, pacman or apt-get found; skipping dependency installation."
         warn "Make sure fprintd, gdbus (glib2) and python3 are installed."
         for cmd in fprintd-verify gdbus python3; do
             command -v "$cmd" >/dev/null || warn "missing: $cmd"
@@ -104,12 +113,17 @@ do_install() {
     systemctl enable "$NAME.service"
     systemctl restart "$NAME.service"
 
-    if systemctl is-active --quiet "$NAME.service"; then
+    # A crash-looping service still reads "active" right after a restart, so
+    # check that the same process outlasts RestartSec=2.
+    local pid
+    pid=$(systemctl show -P MainPID "$NAME.service")
+    sleep 3
+    if [[ $pid != 0 && $(systemctl show -P MainPID "$NAME.service") == "$pid" ]]; then
         info "Done. The power button LED will blink while fprintd waits for a finger."
         info "Test it with:  sudo -k; sudo true"
     else
         systemctl status "$NAME.service" --no-pager || true
-        die "Service failed to start."
+        die "Service is not staying up; see: journalctl -u $NAME -b"
     fi
 }
 

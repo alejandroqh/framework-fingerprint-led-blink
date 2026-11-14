@@ -54,6 +54,7 @@ restores SELinux labels (where present) and enables the service.
 |---|---|
 | Fedora and derivatives (`dnf`) | `glib2` (for `gdbus`), `python3`, `fprintd`, `fprintd-pam` |
 | Arch, CachyOS and derivatives (`pacman`) | `glib2`, `python`, `fprintd` |
+| Debian, Ubuntu and derivatives (`apt`) | `libglib2.0-bin` (for `gdbus`), `python3`, `fprintd`, `libpam-fprintd` |
 | Others | none: install `fprintd`, `gdbus` (glib2) and `python3` yourself first |
 
 Requires fprintd 1.92 or newer (for the `finger-needed` property), Python 3.8
