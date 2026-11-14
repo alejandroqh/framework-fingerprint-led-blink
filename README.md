@@ -12,6 +12,7 @@ On Framework laptops (13 and 16) the fingerprint reader lives inside the power
 button, but nothing tells you when it is actually expecting a touch (sudo,
 lock screen, KWallet, polkit…). Neither fprintd, the BIOS, nor the desktop
 offer a setting for this, so this small service adds the visual cue.
+It runs on Linux; for Windows there is a [community port](#windows).
 
 ## How it works
 
@@ -59,7 +60,8 @@ restores SELinux labels (where present) and enables the service.
 
 Requires fprintd 1.92 or newer (for the `finger-needed` property), Python 3.8
 or newer, and systemd. On Void Linux, which uses runit, see
-[Void Linux (runit)](#void-linux-runit) below; on NixOS, see [NixOS](#nixos).
+[Void Linux (runit)](#void-linux-runit) below; on NixOS, see [NixOS](#nixos);
+on Windows, see [Windows](#windows).
 
 Upgrading from an earlier version: pull and re-run `./install.sh`.
 
@@ -189,6 +191,32 @@ See that README for the options (LED, timings). The flake was written by
 [u/Sophronesis0](https://www.reddit.com/user/Sophronesis0)
 ([sophronesis/nix-framework-fingerprint-led-blink](https://github.com/sophronesis/nix-framework-fingerprint-led-blink),
 for the first, root-based version); the fork follows the current version.
+
+### Windows
+
+Windows has no fprintd, so this service can't run there.
+[@spike1478](https://github.com/spike1478) wrote a separate PowerShell port:
+[spike1478/framework-power-led-blink-windows](https://github.com/spike1478/framework-power-led-blink-windows).
+It blinks the power LED while the lock screen, a UAC prompt or the Windows
+Security credential pop-up is open (60 s cap), and drives the LED through
+Framework's `framework_tool`.
+
+From its README, in an **administrator** PowerShell window, inside a clone or
+download of that repository:
+
+```powershell
+winget install FrameworkComputer.framework_tool
+.\power-led-blink.ps1 -RunForSeconds 90   # test first: lock with Win+L, the LED should blink
+.\install-task.ps1                        # install: runs at sign-in as a scheduled task
+.\uninstall-task.ps1                      # uninstall
+```
+
+If PowerShell refuses to run the scripts, allow them for that window only with
+`Set-ExecutionPolicy -Scope Process Bypass`. Tested by its author on a
+Framework Laptop 13 (Ryzen 5 7640U) with Windows 11.
+
+The Windows port is not part of this repository, so report problems on its
+issue tracker.
 
 ## Security
 
