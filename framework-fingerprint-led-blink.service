@@ -9,10 +9,12 @@ ExecStopPost=/bin/sh -c 'for l in /sys/class/leds/chromeos:white:power /sys/clas
 Restart=on-failure
 RestartSec=2
 
-# Unprivileged: a throwaway user that may only write the LED (udev rule grants
-# group fprint-led write access to its trigger and brightness files).
-DynamicUser=yes
-SupplementaryGroups=fprint-led
+# Unprivileged: a system user that may only write the LED (udev rule grants
+# group fprint-led write access to its trigger and brightness files). Static,
+# from sysusers.conf: dbus-daemon rejects DynamicUser= UIDs it cannot resolve.
+User=fprint-led
+Group=fprint-led
+RemoveIPC=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 NoNewPrivileges=yes

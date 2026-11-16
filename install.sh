@@ -45,6 +45,7 @@ do_uninstall() {
         done
         echo chromeos-auto > "$LED/trigger" || true
     fi
+    userdel "$GROUP" 2>/dev/null || true
     groupdel "$GROUP" 2>/dev/null || true
     info "Removed. The power LED is back under EC control."
 }

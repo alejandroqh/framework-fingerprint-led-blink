@@ -123,7 +123,7 @@ and the LED interface, but does not perform a physical blink test.
 | `/usr/local/sbin/framework-fingerprint-led-blink` | all | the watcher (Python, stdlib only) |
 | `/etc/udev/rules.d/90-framework-fingerprint-led-blink.rules` | all | gives group `fprint-led` write access to the LED's `trigger`, `brightness` and `multi_intensity` only |
 | `/etc/systemd/system/framework-fingerprint-led-blink.service` | systemd | systemd unit (unprivileged, sandboxed) |
-| `/etc/sysusers.d/framework-fingerprint-led-blink.conf` | systemd | creates the `fprint-led` group |
+| `/etc/sysusers.d/framework-fingerprint-led-blink.conf` | systemd | creates the `fprint-led` user and group |
 | `/etc/sv/framework-fingerprint-led-blink/` | Void | runit service: `run`, `finish` and `log/run` |
 | `/var/service/framework-fingerprint-led-blink` | Void | symlink that enables the service |
 | `/var/log/framework-fingerprint-led-blink/` | Void | service logs (kept on uninstall) |
@@ -169,7 +169,7 @@ The package installs the same files as the installer, but under `/usr`
 | `/usr/bin/framework-fingerprint-led-blink` | the watcher |
 | `/usr/lib/systemd/system/framework-fingerprint-led-blink.service` | systemd unit |
 | `/usr/lib/udev/rules.d/90-framework-fingerprint-led-blink.rules` | LED permissions for group `fprint-led` |
-| `/usr/lib/sysusers.d/framework-fingerprint-led-blink.conf` | creates the `fprint-led` group |
+| `/usr/lib/sysusers.d/framework-fingerprint-led-blink.conf` | creates the `fprint-led` user and group |
 
 The AUR package is not part of this repository's installer, so report
 packaging problems on the AUR page.
@@ -243,7 +243,7 @@ Current design:
   is true; `finger-present` pauses it while a finger is on the sensor and
   cannot start it on its own. A rejected `VerifyStart` never sets
   `finger-needed`.
-- **No root.** On systemd the service runs as a throwaway `DynamicUser` with
+- **No root.** The service runs as the locked `fprint-led` system user with
   no capabilities. The udev rule lets it write only the LED's `trigger`,
   `brightness` and `multi_intensity` (color) files.
 - **Sandboxed (systemd only).** Read-only filesystem, no network, private
