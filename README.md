@@ -284,6 +284,7 @@ Thanks to everyone who tested it after the
 | Framework Laptop 13 (Ryzen 5 7640U) | Arch Linux | manual | [u/newenglandpolarbear](https://www.reddit.com/user/newenglandpolarbear) |
 | Framework Laptop 13 (Core Ultra 5 125H) | Arch Linux | manual | [u/X_m7](https://www.reddit.com/user/X_m7) |
 | Framework laptop | CachyOS | `install.sh` with the `dnf` line commented out, deps installed by hand | [u/CRRogue](https://www.reddit.com/user/CRRogue) |
+| Framework Laptop 13 Pro (Intel Core Ultra) | Ubuntu 26.04 | `install.sh` | [@alesrebec](https://github.com/alesrebec) |
 
 So far it works on the **Laptop 16** and the **Laptop 13 (AMD and Intel)**.
 Support for older Framework 13 models with a `chromeos:multicolor:power` LED
@@ -300,6 +301,10 @@ Void Linux (runit) support, and stopping the blink as soon as a finger touches
 the sensor, were contributed by [@rehanzo](https://github.com/rehanzo) in
 [#3](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/3) and
 [#4](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/4).
+Ubuntu support (the service runs as a static `fprint-led` user, because
+Ubuntu's dbus-daemon rejects systemd dynamic users) was tested by
+[@alesrebec](https://github.com/alesrebec) in
+[#8](https://github.com/alejandroqh/framework-fingerprint-led-blink/issues/8).
 
 Tested it on another model or distro? Open an issue or PR to add it here.
 
