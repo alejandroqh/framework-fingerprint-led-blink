@@ -287,26 +287,23 @@ Thanks to everyone who tested it after the
 | Framework Laptop 13 Pro (Intel Core Ultra) | Ubuntu 26.04 | `install.sh` | [@alesrebec](https://github.com/alesrebec) |
 
 So far it works on the **Laptop 16** and the **Laptop 13 (AMD and Intel)**.
-Support for older Framework 13 models with a `chromeos:multicolor:power` LED
-was contributed by
-[u/catastrophic-success](https://www.reddit.com/user/catastrophic-success),
-who reported the LED and provided its details (Framework 13 DIY Intel i5,
-Manjaro). The multicolor code path was tested on the same kind of LED;
-confirmation on one of those laptops is welcome.
-Native Arch and CachyOS support in the installer was contributed by
-[@JoshCodeStuff](https://github.com/JoshCodeStuff) in
-[#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2);
-the Arch and CachyOS reports above predate it.
-Void Linux (runit) support, and stopping the blink as soon as a finger touches
-the sensor, were contributed by [@rehanzo](https://github.com/rehanzo) in
-[#3](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/3) and
-[#4](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/4).
-Ubuntu support (the service runs as a static `fprint-led` user, because
-Ubuntu's dbus-daemon rejects systemd dynamic users) was tested by
-[@alesrebec](https://github.com/alesrebec) in
-[#8](https://github.com/alejandroqh/framework-fingerprint-led-blink/issues/8).
+The Arch and CachyOS reports above predate native installer support for them
+([#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2)).
 
 Tested it on another model or distro? Open an issue or PR to add it here.
+
+### Contributions
+
+| Contribution | By | Where |
+|---|---|---|
+| Older Framework 13 (Intel 11th–13th gen) with a `chromeos:multicolor:power` LED: reported the LED and its details (Framework 13 DIY Intel i5, Manjaro) | [u/catastrophic-success](https://www.reddit.com/user/catastrophic-success) | Reddit |
+| Native Arch and CachyOS support in `install.sh` | [@JoshCodeStuff](https://github.com/JoshCodeStuff) | [#2](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/2) |
+| Void Linux (runit) support | [@rehanzo](https://github.com/rehanzo) | [#3](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/3) |
+| Stop blinking as soon as a finger touches the sensor | [@rehanzo](https://github.com/rehanzo) | [#4](https://github.com/alejandroqh/framework-fingerprint-led-blink/pull/4) |
+| Ubuntu support: reported the crash on Ubuntu's dbus-daemon and tested the fix (the service now runs as a static `fprint-led` user) | [@alesrebec](https://github.com/alesrebec) | [#8](https://github.com/alejandroqh/framework-fingerprint-led-blink/issues/8) |
+
+The multicolor LED code was tested on the same kind of LED, but not yet on one
+of those older laptops; confirmation is welcome.
 
 ### Reference system
 
